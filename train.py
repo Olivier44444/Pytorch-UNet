@@ -1,5 +1,3 @@
-#Test push
-
 import argparse
 import logging
 import os
@@ -24,6 +22,7 @@ from utils.dice_score import dice_loss
 dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
+
 
 
 def train_model(
