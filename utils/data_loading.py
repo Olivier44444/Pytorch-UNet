@@ -19,17 +19,22 @@ import numpy as np
 #-------------------------------------------------------------------
 def load_image(filename):
     filename = str(filename)  # Convertir en chaîne de caractères
+    
     if filename.endswith('.nii') or filename.endswith('.nii.gz'):
         # Charger un fichier NIfTI
         nii_img = nib.load(filename)
         return nii_img.get_fdata()
+    elif filename.endswith('.png'):
+        # Charger une image PNG et la convertir en tableau NumPy
+        with Image.open(filename) as img:
+            return np.array(img)
     else:
-        # Charger une image standard avec Pillow
-        from PIL import Image
+        # Charger d'autres formats d'image standard avec Pillow
         return Image.open(filename)
 #----------------------------------------------------------------------
 
 def unique_mask_values(idx, mask_dir, mask_suffix):
+    print("SUFFIXXXXXXXXXXXXXXXXXXXXEEEEEEEEEEEEEEEEEEEEEEE : ", idx + mask_suffix + '.*')
     mask_file = list(mask_dir.glob(idx + mask_suffix + '.*'))[0]
     mask = np.asarray(load_image(mask_file))
     if mask.ndim == 3:
@@ -103,6 +108,7 @@ class BasicDataset(Dataset):
 
     def __getitem__(self, idx):
         name = self.ids[idx]
+        logging.info(f'Idx: {idx}')
         mask_file = list(self.mask_dir.glob(name + self.mask_suffix + '.*'))
         img_file = list(self.images_dir.glob(name + '.*'))
 
