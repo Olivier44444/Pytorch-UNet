@@ -34,7 +34,7 @@ def load_image(filename):
 #----------------------------------------------------------------------
 
 def unique_mask_values(idx, mask_dir, mask_suffix):
-    print("SUFFIXXXXXXXXXXXXXXXXXXXXEEEEEEEEEEEEEEEEEEEEEEE : ", idx + mask_suffix + '.*')
+    #print("SUFFIXXXXXXXXXXXXXXXXXXXXEEEEEEEEEEEEEEEEEEEEEEE : ", idx + mask_suffix + '.*')
     mask_file = list(mask_dir.glob(idx + mask_suffix + '.*'))[0]
     mask = np.asarray(load_image(mask_file))
     if mask.ndim == 3:

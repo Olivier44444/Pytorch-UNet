@@ -50,6 +50,17 @@ def train_model(
     n_train = len(dataset) - n_val
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
+
+
+    # Récupérer les indices d'entraînement
+    train_indices = train_set.indices
+    # Accéder au dataset d'origine
+    original_dataset = train_set.dataset
+    # Utiliser le dataset d'origine pour récupérer les noms d'images
+    train_image_names = [original_dataset.ids[i] for i in train_indices]  # Utilise le dataset d'origine pour accéder à 'ids'
+    print("Noms des images d'entraînement :", train_image_names)
+
+
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
