@@ -20,12 +20,12 @@ import numpy as np
 def load_image(filename):
     filename = str(filename)  # Convertir en chaîne de caractères
     
-    if filename.endswith('.nii') or filename.endswith('.nii.gz'):
+    if filename.endswith(('.nii', '.nii.gz')):
         # Charger un fichier NIfTI
         nii_img = nib.load(filename)
         return nii_img.get_fdata()
-    elif filename.endswith('.png'):
-        # Charger une image PNG et la convertir en tableau NumPy
+    elif filename.endswith(('.png', '.jpg', '.jpeg')):
+        # Charger une image PNG ou JPEG et la convertir en tableau NumPy
         with Image.open(filename) as img:
             return np.array(img)
     else:
