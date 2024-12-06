@@ -18,6 +18,7 @@ from evaluate import evaluate
 from unet import UNet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
+from utils.weights_calcul import calculate_class_weights 
 
 dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
@@ -29,7 +30,7 @@ def train_model(
         device,
         epochs: int = 5,
         batch_size: int = 1,
-        learning_rate: float = 1e-5,
+        learning_rate: float = 1e-4, # MODIFICATION POL
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
         img_scale: float = 0.5,
@@ -44,12 +45,17 @@ def train_model(
     except (AssertionError, RuntimeError, IndexError):
         dataset = BasicDataset(dir_img, dir_mask, img_scale)
 
-    # 2. Split into train / validation partitions
+    # 2. Calcul des poids des classes
+    logging.info("Calculating class weights...")
+    class_weights = calculate_class_weights(dataset, model.n_classes)
+    logging.info(f"Class weights: {class_weights}")
+
+    # 3. Split into train / validation partitions
     n_val = int(len(dataset) * val_percent)
     n_train = len(dataset) - n_val
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
-    # 3. Create data loaders
+    # 4. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
@@ -73,15 +79,15 @@ def train_model(
         Mixed Precision: {amp}
     ''')
 
-    # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
+    # 5. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
     optimizer = optim.RMSprop(model.parameters(),
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp) 
-    criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
+    criterion = nn.CrossEntropyLoss(weight=class_weights.to(device)) if model.n_classes > 1 else nn.BCEWithLogitsLoss()
     global_step = 0
 
-    # 5. Begin training
+    # 6. Begin training
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0
@@ -171,7 +177,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
     parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
-    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
+    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-4,# MODIFICATION POL
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
@@ -194,7 +200,7 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    model = UNet(n_channels=1, n_classes= 256, bilinear=args.bilinear)
+    model = UNet(n_channels=1, n_classes= 7, bilinear=args.bilinear)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'

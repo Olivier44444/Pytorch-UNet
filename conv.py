@@ -25,7 +25,7 @@ def save_slices_2d(nii_file_path, output_dir, prefix, is_mask=False):
         # Sauvegarde l'image avec un nom basé sur le préfixe
         suffix = "_mask" if is_mask else ""
         img = Image.fromarray(slice_2d_normalized)
-        img.save(os.path.join(output_dir, f"{prefix}{i+1}{suffix}.jpeg"), format="JPEG")
+        img.save(os.path.join(output_dir, f"{prefix}{i+1}{suffix}.png"), format="PNG")
 
 def process_data():
     # Prépare les dossiers imgs et masks
