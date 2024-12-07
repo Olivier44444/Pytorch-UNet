@@ -89,11 +89,14 @@ class BasicDataset(Dataset):
         cumulative_slices = 0
         for img_id in self.ids:
             img_file = self.images_dir / f"{img_id}.nii"
-            mask_file = self.mask_dir / f"{img_id}{self.mask_suffix}.nii"
+            mask_file = self.mask_dir / f"{img_id}{self.mask_suffix}.nii"   
 
             # Charger les images et masques 3D
             img = load_image(img_file)
             mask = load_image(mask_file)
+
+            #print('TYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYPE : ', type(img))
+            #print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', img.shape)
 
             # Si l'index idx est dans cette image, récupérer la slice correspondante
             depth = img.shape[2]
@@ -103,9 +106,16 @@ class BasicDataset(Dataset):
                 img_slice = img[:, :, z]
                 mask_slice = mask[:, :, z]
 
+                
                 # Prétraiter l'image et le masque
                 img_slice = self.preprocess(self.mask_values, img_slice, self.scale, is_mask=False)
                 mask_slice = self.preprocess(self.mask_values, mask_slice, self.scale, is_mask=True)
+
+                #print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', img_slice.shape)
+
+                #Permet d'avoir une matrice de la forme (1, x, y)
+                img_slice = img_slice[None, :, :]
+                #mask_slice = mask_slice[None, :, :]
 
                 # Générer les noms uniques
                 image_name = f"image{self.image_counter}"

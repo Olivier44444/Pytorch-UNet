@@ -58,19 +58,19 @@ def train_model(
 
 
     #_____________________________________________AFFICHER UNE IMAGE_________________________________________________
-    sample = dataset[20]
+    #sample = dataset[20]
 
     # Extraire l'image (en tant que tableau NumPy) et la masque
-    image = sample['image'].numpy()  # Conversion en NumPy pour Matplotlib
-    mask = sample['mask'].numpy()
+    #image = sample['image'].numpy()  # Conversion en NumPy pour Matplotlib
+    #mask = sample['mask'].numpy()
 
     # Visualiser l'image et son masque
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    axes[0].imshow(image, cmap='gray')  # Affichage de l'image
-    axes[0].set_title('Image')
+    #fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    #axes[0].imshow(image, cmap='gray')  # Affichage de l'image
+    #axes[0].set_title('Image')
 
-    axes[1].imshow(mask, cmap='gray')  # Affichage du masque (si nécessaire)
-    axes[1].set_title('Mask')
+    #axes[1].imshow(mask, cmap='gray')  # Affichage du masque (si nécessaire)
+    #axes[1].set_title('Mask')
 
     # Affichage
     #plt.show()
@@ -146,6 +146,10 @@ def train_model(
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
+
+                # Pour obtenir un tenseur de la forme (1, 1, x, y)
+                #images = images.unsqueeze(0)
+
                 print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', images.shape)
                 assert images.shape[0] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
@@ -232,7 +236,7 @@ def get_args():
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
-    parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
+    parser.add_argument('--scale', '-s', type=float, default=1, help='Downscaling factor of the images')
     parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
