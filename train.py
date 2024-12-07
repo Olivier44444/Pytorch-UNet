@@ -19,6 +19,9 @@ from unet import UNet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
 
+
+import matplotlib.pyplot as plt
+
 dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
@@ -33,7 +36,7 @@ def train_model(
         learning_rate: float = 1e-5,
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
-        img_scale: float = 0.5,
+        img_scale: float = 1,
         amp: bool = False,
         weight_decay: float = 1e-8,
         momentum: float = 0.999,
@@ -45,19 +48,62 @@ def train_model(
     except (AssertionError, RuntimeError, IndexError):
         dataset = BasicDataset(dir_img, dir_mask, img_scale)
 
+    print(f"Nombre d'exemples dans le dataset: {len(dataset)}")
+
+
+
+
+
+
+
+
+    #_____________________________________________AFFICHER UNE IMAGE_________________________________________________
+    sample = dataset[20]
+
+    # Extraire l'image (en tant que tableau NumPy) et la masque
+    image = sample['image'].numpy()  # Conversion en NumPy pour Matplotlib
+    mask = sample['mask'].numpy()
+
+    # Visualiser l'image et son masque
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    axes[0].imshow(image, cmap='gray')  # Affichage de l'image
+    axes[0].set_title('Image')
+
+    axes[1].imshow(mask, cmap='gray')  # Affichage du masque (si nécessaire)
+    axes[1].set_title('Mask')
+
+    # Affichage
+    #plt.show()
+    #_____________________________________________AFFICHER UNE IMAGE_________________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
     # 2. Split into train / validation partitions
     n_val = int(len(dataset) * val_percent)
     n_train = len(dataset) - n_val
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
-
+    print(f"Nombre d'exemples dans le train_set: {len(train_set)}")
 
     # Récupérer les indices d'entraînement
     train_indices = train_set.indices
     # Accéder au dataset d'origine
     original_dataset = train_set.dataset
     # Utiliser le dataset d'origine pour récupérer les noms d'images
-    train_image_names = [original_dataset.ids[i] for i in train_indices]  # Utilise le dataset d'origine pour accéder à 'ids'
+    print(f"Size of original_dataset.ids: {len(original_dataset.ids)}")
+    print(f"Size of train_indices: {len(train_indices)}")
+
+
+    train_image_names = [original_dataset[idx]['image_name'] for idx in train_indices] # Utilise le dataset d'origine pour accéder à 'ids'
     print("Noms des images d'entraînement :", train_image_names)
 
 
@@ -100,8 +146,8 @@ def train_model(
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
-
-                assert images.shape[1] == model.n_channels, \
+                print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', images.shape)
+                assert images.shape[0] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
                     f'but loaded images have {images.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'

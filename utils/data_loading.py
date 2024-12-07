@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import torch
-from PIL import Image
+import nibabel as nib
 from functools import lru_cache
 from functools import partial
 from itertools import repeat
@@ -9,57 +9,50 @@ from multiprocessing import Pool
 from os import listdir
 from os.path import splitext, isfile, join
 from pathlib import Path
+from scipy.ndimage import zoom  # Importation de la fonction zoom
 from torch.utils.data import Dataset
 from tqdm import tqdm
-import nibabel as nib
-import numpy as np
 
 
-#Changement fait par Pol
-#-------------------------------------------------------------------
 def load_image(filename):
-    filename = str(filename)  # Convertir en chaîne de caractères
-    
-    if filename.endswith(('.nii', '.nii.gz')):
-        # Charger un fichier NIfTI
-        nii_img = nib.load(filename)
-        return nii_img.get_fdata()
-    elif filename.endswith(('.png', '.jpg', '.jpeg')):
-        # Charger une image PNG ou JPEG et la convertir en tableau NumPy
-        with Image.open(filename) as img:
-            return np.array(img)
+    ext = splitext(filename)[1]
+    if ext == '.npy':
+        return np.load(filename)
+    elif ext in ['.pt', '.pth']:
+        return torch.load(filename).numpy()
+    elif ext in ['.nii', '.nii.gz']:
+        return nib.load(filename).get_fdata()
     else:
-        # Charger d'autres formats d'image standard avec Pillow
-        return Image.open(filename)
-#----------------------------------------------------------------------
+        raise ValueError(f"Unsupported file extension: {ext}")
+
 
 def unique_mask_values(idx, mask_dir, mask_suffix):
-    #print("SUFFIXXXXXXXXXXXXXXXXXXXXEEEEEEEEEEEEEEEEEEEEEEE : ", idx + mask_suffix + '.*')
-    mask_file = list(mask_dir.glob(idx + mask_suffix + '.*'))[0]
+    mask_file = mask_dir / f"{idx}{mask_suffix}.nii"
     mask = np.asarray(load_image(mask_file))
     if mask.ndim == 3:
-        # Prendre une coupe centrale si les données sont volumétriques
-        mask = mask[:, :, mask.shape[2] // 2]
-    if mask.ndim == 2:
         return np.unique(mask)
     else:
-        raise ValueError(f'Loaded masks should have 2 or 3 dimensions, found {mask.ndim}')
-#----------------------------------------------------------------------
+        raise ValueError(f"Loaded masks should have 3 dimensions, found {mask.ndim}")
 
 
 class BasicDataset(Dataset):
-    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = ''):
+    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = '_mask'):
         self.images_dir = Path(images_dir)
         self.mask_dir = Path(mask_dir)
         assert 0 < scale <= 1, 'Scale must be between 0 and 1'
         self.scale = scale
         self.mask_suffix = mask_suffix
+        self.image_counter = 1  # Compteur global pour les noms des images
 
-        self.ids = [splitext(file)[0] for file in listdir(images_dir) if isfile(join(images_dir, file)) and not file.startswith('.')]
+        # Obtenir les IDs des fichiers
+        self.ids = [file.split('_mask')[0] for file in listdir(mask_dir)
+                    if isfile(join(mask_dir, file)) and file.endswith('.nii')]
         if not self.ids:
             raise RuntimeError(f'No input file found in {images_dir}, make sure you put your images there')
 
         logging.info(f'Creating dataset with {len(self.ids)} examples')
+
+        # Scanner les fichiers de masque pour déterminer les valeurs uniques
         logging.info('Scanning mask files to determine unique values')
         with Pool() as p:
             unique = list(tqdm(
@@ -67,74 +60,72 @@ class BasicDataset(Dataset):
                 total=len(self.ids)
             ))
 
-        self.mask_values = list(sorted(np.unique(np.concatenate(unique), axis=0).tolist()))
+        self.mask_values = list(sorted(np.unique(np.concatenate(unique)).tolist()))
         logging.info(f'Unique mask values: {self.mask_values}')
-    
+
     def __len__(self):
-        return len(self.ids)
-    #Autre modification par Pol
-    #--------------------------------------------------------------------------------------------------------
-    @staticmethod
-    def preprocess(mask_values, pil_img, scale, is_mask):
-        if isinstance(pil_img, np.ndarray):  # Si c'est un tableau NumPy
-            pil_img = Image.fromarray(pil_img.astype(np.uint8))
+        # La taille du dataset est le nombre total de slices 2D
+        total_slices = 0
+        for img_id in self.ids:
+            img_file = self.images_dir / f"{img_id}.nii"
+            img = load_image(img_file)  # Charger l'image 3D
+            total_slices += img.shape[2]  # Profondeur (nombre de slices 2D)
+        return total_slices
 
-        w, h = pil_img.size
-        newW, newH = int(scale * w), int(scale * h)
-        assert newW > 0 and newH > 0, 'Scale is too small, resized images would have no pixel'
-        pil_img = pil_img.resize((newW, newH), resample=Image.NEAREST if is_mask else Image.BICUBIC)
-        img = np.asarray(pil_img)
-
+    def preprocess(self, mask_values, img, scale, is_mask):
+        # Redimensionner et normaliser les images et les masques
         if is_mask:
-            mask = np.zeros((newH, newW), dtype=np.int64)
+            mask = np.zeros_like(img, dtype=np.int64)
             for i, v in enumerate(mask_values):
-                if img.ndim == 2:
-                    mask[img == v] = i
-                else:
-                    mask[(img == v).all(-1)] = i
-
+                mask[img == v] = i
             return mask
         else:
-            if img.ndim == 2:
-                img = img[np.newaxis, ...]
-            else:
-                img = img.transpose((2, 0, 1))
-
-            if (img > 1).any():
-                img = img / 255.0
-
+            if img.max() > 1:
+                img = img / 255.0  # Normalisation des images
             return img
 
-
     def __getitem__(self, idx):
-        name = self.ids[idx]
-        logging.info(f'Idx: {idx}')
-        mask_file = list(self.mask_dir.glob(name + self.mask_suffix + '.*'))
-        img_file = list(self.images_dir.glob(name + '.*'))
+        # Identifier quel fichier (image et masque) utiliser pour cet index
+        cumulative_slices = 0
+        for img_id in self.ids:
+            img_file = self.images_dir / f"{img_id}.nii"
+            mask_file = self.mask_dir / f"{img_id}{self.mask_suffix}.nii"
 
-        assert len(img_file) == 1, f'Either no image or multiple images found for the ID {name}: {img_file}'
-        assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
+            # Charger les images et masques 3D
+            img = load_image(img_file)
+            mask = load_image(mask_file)
 
-        mask = load_image(mask_file[0])
-        img = load_image(img_file[0])
+            # Si l'index idx est dans cette image, récupérer la slice correspondante
+            depth = img.shape[2]
+            if cumulative_slices <= idx < cumulative_slices + depth:
+                # Identifier l'index exact de la slice
+                z = idx - cumulative_slices
+                img_slice = img[:, :, z]
+                mask_slice = mask[:, :, z]
 
-        # Si les masques ou images sont volumétriques, prendre une coupe
-        if mask.ndim == 3:
-            mask = mask[:, :, mask.shape[2] // 2]
-        if img.ndim == 3 and img.shape[2] > 3:  # Pour les images volumétriques
-            img = img[:, :, img.shape[2] // 2]
+                # Prétraiter l'image et le masque
+                img_slice = self.preprocess(self.mask_values, img_slice, self.scale, is_mask=False)
+                mask_slice = self.preprocess(self.mask_values, mask_slice, self.scale, is_mask=True)
 
-        assert img.shape[:2] == mask.shape[:2], \
-            f'Image and mask {name} should be the same size, but are {img.shape} and {mask.shape}'
+                # Générer les noms uniques
+                image_name = f"image{self.image_counter}"
+                mask_name = f"{image_name}_mask"
+                self.image_counter += 1  # Incrémenter le compteur global
 
-        img = self.preprocess(self.mask_values, Image.fromarray(img.astype(np.uint8)), self.scale, is_mask=False)
-        mask = self.preprocess(self.mask_values, Image.fromarray(mask.astype(np.uint8)), self.scale, is_mask=True)
+                # Retourner l'image, le masque et leurs noms
+                return {
+                    'image': torch.as_tensor(img_slice.copy()).float().contiguous(),
+                    'mask': torch.as_tensor(mask_slice.copy()).long().contiguous(),
+                    'image_name': image_name,
+                    'mask_name': mask_name
+                }
 
-        return {
-            'image': torch.as_tensor(img.copy()).float().contiguous(),
-            'mask': torch.as_tensor(mask.copy()).long().contiguous()
-        }
-#----------------------------------------------------------------------------------------------------------------------------
+            # Sinon, augmenter l'index de cumulative_slices pour le prochain fichier
+            cumulative_slices += depth
+
+        # Si on arrive ici, c'est qu'on a dépassé l'index prévu
+        raise IndexError(f"Index {idx} out of range in dataset.")
+
 
 class CarvanaDataset(BasicDataset):
     def __init__(self, images_dir, mask_dir, scale=1):
