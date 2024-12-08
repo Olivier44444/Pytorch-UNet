@@ -12,7 +12,7 @@ from pathlib import Path
 from scipy.ndimage import zoom  # Importation de la fonction zoom
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+from skimage.transform import resize
 
 def load_image(filename):
     ext = splitext(filename)[1]
@@ -103,8 +103,9 @@ class BasicDataset(Dataset):
             if cumulative_slices <= idx < cumulative_slices + depth:
                 # Identifier l'index exact de la slice
                 z = idx - cumulative_slices
-                img_slice = img[:, :, z]
-                mask_slice = mask[:, :, z]
+                img_slice = resize(img[:, :, z],(256,256),mode='reflect',anti_aliasing=True)
+                mask_slice = resize(mask[:, :, z],(256,256),mode='reflect',anti_aliasing=True)
+                
 
                 
                 # Prétraiter l'image et le masque

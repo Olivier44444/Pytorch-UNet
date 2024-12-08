@@ -150,7 +150,7 @@ def train_model(
                 # Pour obtenir un tenseur de la forme (1, 1, x, y)
                 #images = images.unsqueeze(0)
 
-                print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', images.shape)
+                #print('SHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPE : ', images.shape)
                 assert images.shape[0] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
                     f'but loaded images have {images.shape[1]} channels. Please check that ' \
@@ -256,7 +256,7 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    model = UNet(n_channels=1, n_classes= 7, bilinear=args.bilinear)
+    model = UNet(n_channels=1, n_classes= 5, bilinear=args.bilinear)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'
